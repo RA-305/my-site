@@ -9,8 +9,9 @@
     /* Weather widget styles (keeps visual consistency with site) */
     .weather-card {
       display: inline-flex;
-      gap: 0.9rem;
-      align-items: center;
+      flex-direction: column; /* stack current weather above forecast */
+      align-items: flex-start;
+      gap: 0.15rem;
       padding: 0.85rem 1rem;
       /* nudge down slightly as requested */
       margin-top: 0.25in;
@@ -40,6 +41,46 @@
       color: var(--muted);
       font-weight: 400;
     }
+
+    /* Forecast list (normally displayed beside current weather) */
+    .weather-top {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      width: 100%;
+    }
+
+    .separator {
+      width: 1px;
+      height: 46px;
+      background: var(--border);
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .forecast {
+      margin-top: 0; /* no vertical gap when side-by-side */
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .forecast-day {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0.45rem 0.6rem;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.04);
+      min-width: 58px;
+      font-size: 0.75rem;
+      color: var(--text);
+    }
+
+    .fd-day { color: var(--muted); font-weight: 600; margin-bottom: 0.15rem; }
+    .fd-emoji { font-size: 1.05rem; margin-bottom: 0.15rem; }
+    .fd-temps { color: var(--muted); font-weight: 600; }
 
     @media (max-width: 620px) {
       .weather-card { min-width: 120px; }
@@ -162,16 +203,44 @@
         return '🌈';
       }
 
-      function render(data) {
-        const emoji = emojiForCode(data.weathercode);
-        const temp = Math.round(data.temperature);
-        const desc = (data.weathercode === 0) ? 'Clear' : '';
+      function render(current, daily) {
+        const emoji = emojiForCode(current.weathercode);
+        const temp = Math.round(current.temperature);
+        const desc = (current.weathercode === 0) ? 'Clear' : 'Current';
+
+        // Build 5-day forecast HTML
+        let forecastHTML = '';
+        if (daily && daily.time && daily.time.length) {
+          const count = Math.min(5, daily.time.length);
+          for (let i = 0; i < count; i++) {
+            const date = new Date(daily.time[i]);
+            const day = date.toLocaleDateString(undefined, { weekday: 'short' });
+            const wcode = daily.weathercode ? daily.weathercode[i] : null;
+            const em = wcode != null ? emojiForCode(wcode) : '•';
+            const tmax = daily.temperature_2m_max ? Math.round(daily.temperature_2m_max[i]) : '';
+            const tmin = daily.temperature_2m_min ? Math.round(daily.temperature_2m_min[i]) : '';
+            forecastHTML += `
+              <div class="forecast-day">
+                <div class="fd-day">${day}</div>
+                <div class="fd-emoji">${em}</div>
+                <div class="fd-temps">${tmax}° / ${tmin}°</div>
+              </div>
+            `;
+          }
+        }
+
         el.innerHTML = `
-          <span class="weather-emoji">${emoji}</span>
-          <span class="weather-temp">
-            <span>${temp}°F</span>
-            <span class="weather-desc">${desc || 'Current'}</span>
-          </span>
+          <div class="weather-top">
+            <div style="display:inline-flex;gap:.9rem;align-items:center;">
+              <span class="weather-emoji">${emoji}</span>
+              <span class="weather-temp">
+                <span>${temp}°F</span>
+                <span class="weather-desc">${desc}</span>
+              </span>
+            </div>
+            <div class="separator" aria-hidden="true"></div>
+            <div class="forecast" aria-hidden="false">${forecastHTML}</div>
+          </div>
         `;
       }
 
@@ -180,7 +249,7 @@
       }
 
       function fetchWeather(lat, lon) {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&temperature_unit=fahrenheit`;
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto`;
         fetch(url)
           .then(r => {
             if (!r.ok) throw new Error('Weather fetch failed');
@@ -188,7 +257,7 @@
           })
           .then(json => {
             if (json && json.current_weather) {
-              render(json.current_weather);
+              render(json.current_weather, json.daily);
             } else {
               showError('No weather data');
             }
