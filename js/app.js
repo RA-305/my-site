@@ -62,7 +62,7 @@
   }
 
   function fetchWeather(lat, lon) {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min&temunit=fahrenheit&timezone=auto`;
     fetch(url)
       .then(r => {
         if (!r.ok) throw new Error('Weather fetch failed');
