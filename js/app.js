@@ -1,5 +1,5 @@
-++// Weather widget: uses Open-Meteo API (no API key required)
-++(function () {
+// Weather widget: uses Open-Meteo API (no API key required)
+(function () {
   const el = document.getElementById('weather');
 
   function emojiForCode(code) {
@@ -62,7 +62,7 @@
   }
 
   function fetchWeather(lat, lon) {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min&temunit=fahrenheit&timezone=auto`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=weathercode,temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto`;
     fetch(url)
       .then(r => {
         if (!r.ok) throw new Error('Weather fetch failed');
@@ -78,20 +78,34 @@
       .catch(() => showError('Weather unavailable'));
   }
 
+  // Fallback: approximate location from IP when geolocation is unavailable/denied
+  function fetchByIP() {
+    fetch('https://ipapi.co/json/')
+      .then(r => {
+        if (!r.ok) throw new Error('IP lookup failed');
+        return r.json();
+      })
+      .then(json => {
+        if (json && json.latitude != null && json.longitude != null) {
+          fetchWeather(json.latitude, json.longitude);
+        } else {
+          showError('Weather unavailable');
+        }
+      })
+      .catch(() => showError('Weather unavailable'));
+  }
+
   if (!navigator.geolocation) {
-    showError('Geolocation not supported');
+    fetchByIP();
   } else {
     navigator.geolocation.getCurrentPosition(
       pos => {
         const { latitude, longitude } = pos.coords;
         fetchWeather(latitude, longitude);
       },
-      err => {
-        if (err.code === err.PERMISSION_DENIED) {
-          showError('Enable location to see your weather.');
-        } else {
-          showError('Location error');
-        }
+      () => {
+        // Permission denied, blocked (e.g. file://), or timed out — use IP fallback
+        fetchByIP();
       },
       { maximumAge: 10 * 60 * 1000, timeout: 10000 }
     );
