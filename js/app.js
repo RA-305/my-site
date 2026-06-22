@@ -78,21 +78,38 @@
       .catch(() => showError('Weather unavailable'));
   }
 
-  // Fallback: approximate location from IP when geolocation is unavailable/denied
+  // Fallback: approximate location from IP when geolocation is unavailable/denied.
+  // Tries several providers, then a sensible default so weather always loads.
   function fetchByIP() {
-    fetch('https://ipapi.co/json/')
-      .then(r => {
-        if (!r.ok) throw new Error('IP lookup failed');
-        return r.json();
-      })
-      .then(json => {
-        if (json && json.latitude != null && json.longitude != null) {
-          fetchWeather(json.latitude, json.longitude);
-        } else {
-          showError('Weather unavailable');
-        }
-      })
-      .catch(() => showError('Weather unavailable'));
+    const providers = [
+      { url: 'https://ipapi.co/json/', pick: j => [j.latitude, j.longitude] },
+      { url: 'https://ipwho.is/', pick: j => [j.latitude, j.longitude] },
+      { url: 'https://get.geojs.io/v1/ip/geo.json', pick: j => [parseFloat(j.latitude), parseFloat(j.longitude)] }
+    ];
+
+    function tryProvider(i) {
+      if (i >= providers.length) {
+        // Last resort: default location (New York City) so the widget still works
+        fetchWeather(40.7128, -74.006);
+        return;
+      }
+      fetch(providers[i].url)
+        .then(r => {
+          if (!r.ok) throw new Error('IP lookup failed');
+          return r.json();
+        })
+        .then(json => {
+          const [lat, lon] = providers[i].pick(json) || [];
+          if (lat != null && lon != null && !Number.isNaN(lat) && !Number.isNaN(lon)) {
+            fetchWeather(lat, lon);
+          } else {
+            tryProvider(i + 1);
+          }
+        })
+        .catch(() => tryProvider(i + 1));
+    }
+
+    tryProvider(0);
   }
 
   if (!navigator.geolocation) {
